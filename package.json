@@ -1,6 +1,6 @@
 {
-  "name": "cds-pg",
-  "version": "0.0.5",
+  "name": "cds-pg-basic",
+  "version": "0.0.1",
   "description": "PostgreSQL adapter for SAP CDS (CAP)",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sapmentors/cds-pg.git"
+    "url": "git+https://github.com/cpars-innovation/cds-pg.git"
   },
   "keywords": [
     "sap",
@@ -27,9 +27,9 @@
   "author": "SAP Mentors & Friends",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/sapmentors/cds-pg/issues"
+    "url": "https://github.com/cpars-innovation/cds-pg.git/issues"
   },
-  "homepage": "https://github.com/sapmentors/cds-pg#readme",
+  "homepage": "https://github.com/cpars-innovation/cds-pg.git#readme",
   "dependencies": {
     "@sap/cds": "^4.1.9",
     "pg": "^8.3.3",
