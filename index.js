@@ -63,7 +63,7 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
             // execute via db client specific api
             const result = await this.dbc.query(sql)
             // postprocess and return result
-            return this.formatResponse(result, metadata);
+            return result;
         })
         this.on('READ', '*', async function (req) {
             const metadata = this.findMetadata(req.entity)
