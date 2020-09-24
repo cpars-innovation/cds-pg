@@ -1,9 +1,10 @@
 const { Pool } = require('pg')
 const cqn2pgsql = require('./lib/cqn2pgsql')
 const dateTime = require('@sap/cds-runtime/lib/hana/dateTime.js')
-const  localized = require('@sap/cds-runtime/lib/hana/localized.js')
+const localized = require('@sap/cds-runtime/lib/hana/localized.js')
 const { managed, virtual, keys, rewrite } = require('@sap/cds-runtime/lib/db/generic')
-
+const { hasExpand } = require('@sap/cds-runtime/lib/db/expand')
+const { processExpand } = require('./lib/expand')
 /*eslint no-undef: "warn"*/
 /*eslint no-unused-vars: "warn"*/
 const cds = global.cds || require('@sap/cds/lib')
@@ -42,6 +43,7 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
 
         this.before(['CREATE', 'UPDATE'], '*', dateTime) // > has to run before rewrite
 
+        this.before(['CREATE', 'READ', 'UPDATE', 'DELETE'], '*', this.models)
         this.before(['CREATE', 'UPDATE'], '*', keys)
         this.before(['CREATE', 'UPDATE'], '*', managed)
         this.before(['CREATE', 'UPDATE'], '*', virtual)
@@ -52,6 +54,7 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
          * on
          */
         this.on('CREATE', '*', async function (req) {
+            const metadata = this.findMetadata(req, req.entity)
             // this === tx or service
 
             // get sql and values from custom cqn2sql
@@ -60,19 +63,24 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
             // execute via db client specific api
             const result = await this.dbc.query(sql)
             // postprocess and return result
-            return result
+            return this.formatResponse(result, metadata);
         })
         this.on('READ', '*', async function (req) {
-            const metadata = this.findMetadata(req);
-            const result = await this.dbc.query(cqn2pgsql(req.query, metadata))
-            return this.formatResponse(result.rows, req);
+            const metadata = this.findMetadata(req.entity)
+            if (hasExpand(req.query)) {
+                const result = await processExpand(this.dbc, req.query, req._model)
+                return this.formatResponse(result, metadata);
+            }
+
+            const result = await this.dbc.query(cqn2pgsql(req.query, req._model, req.entity));
+            return this.formatResponse(result.rows, metadata);
         })
         this.on('UPDATE', '*', async function (req) {
-            const metadata = this.findMetadata(req);
+            const metadata = this.findMetadata(req.entity);
             return this.dbc.query(cqn2pgsql(req.query, metadata)).then(res => res.rows);
         })
         this.on('DELETE', '*', async function (req) {
-            const metadata = this.findMetadata(req);
+            const metadata = this.findMetadata(req.entity);
             try {
                 const result = await this.dbc.query(cqn2pgsql(req.query, metadata));
                 //  await  this.dbc.query('COMMIT');
@@ -132,6 +140,10 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
         })
     }
 
+    models(req) {
+        this.models = req.context._model;
+    }
+
     /*
      * connection
      */
@@ -160,17 +172,23 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
         super.disconnect(tenant)
     }
 
-    formatResponse(data, req) {
+
+    formatResponse(data, metadata) {
         return data.map(row => {
             Object.keys(row)
                 .forEach((key) => {
-                    const fieldType = this.findFieldType(key, req);
-                    switch (fieldType) {
-                        case "cds.Timestamp":
-                            row[key] = row[key] ? row[key].toISOString() : row[key]
-                            break;
-                        default:
-                            break;
+                    if (Array.isArray(row[key])) {
+                        const innerMetadata = this.findMetadata(metadata.elements[key].target)
+                        row[key] = this.formatResponse(row[key], innerMetadata)
+                    } else {
+                        const fieldType = this.findFieldType(key, metadata);
+                        switch (fieldType) {
+                            case "cds.Timestamp":
+                                row[key] = row[key] ? row[key].toISOString() : row[key]
+                                break;
+                            default:
+                                break;
+                        }
                     }
                 });
             return row;
@@ -178,12 +196,11 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
     }
 
 
-    findMetadata(req) {
-        return req.context._model.definitions[req.entity];
+    findMetadata(entity) {
+        return this.models.definitions[entity];
     }
 
-    findFieldType(fieldName, req) {
-        const metadata = this.findMetadata(req)
+    findFieldType(fieldName, metadata) {
         const elements = metadata.elements;
         return elements[fieldName].type;
     }
