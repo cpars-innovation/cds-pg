@@ -73,7 +73,7 @@ module.exports = class PostgresDatabase extends cds.DatabaseService {
             }
 
             const result = await this.dbc.query(cqn2pgsql(req.query, req._model, req.entity));
-            return this.formatResponse(result.rows, metadata);
+            return result.rows;
         })
         this.on('UPDATE', '*', async function (req) {
             const metadata = this.findMetadata(req.entity);
